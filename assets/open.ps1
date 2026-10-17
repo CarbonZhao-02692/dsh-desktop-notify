@@ -114,8 +114,8 @@ public class DshWin32Focus {
 
 # 1) 把会话 id 回传给正在运行的 DSH host。
 try {
-  if (-not $Uri) { exit 0 }
   Write-Log "start uri=$Uri"
+  if (-not $Uri) { exit 0 }
   $u = [Uri]$Uri
   $query = $u.Query
   if ($query.StartsWith('?')) { $query = $query.Substring(1) }
