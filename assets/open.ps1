@@ -75,6 +75,32 @@ function Activate-Browser {
         Where-Object { $_.MainWindowTitle } | Select-Object -First 1
     }
     if ($browser) {
+      try {
+        Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public class DshWin32Focus {
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+}
+'@
+        $hwnd = $browser.MainWindowHandle
+        if ($hwnd -ne 0) {
+          [DshWin32Focus]::ShowWindow($hwnd, 9) | Out-Null
+          [DshWin32Focus]::BringWindowToTop($hwnd) | Out-Null
+          $foreground = [DshWin32Focus]::SetForegroundWindow($hwnd)
+          if (-not $foreground) {
+            [DshWin32Focus]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)
+            [DshWin32Focus]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
+            $foreground = [DshWin32Focus]::SetForegroundWindow($hwnd)
+          }
+          Write-Log "ShowWindow/SetForegroundWindow hwnd=$hwnd result=$foreground"
+        }
+      } catch {
+        Write-Log "Win32 activate error: $($_.Exception.Message)"
+      }
       $activated = $shell.AppActivate($browser.Id)
       Write-Log "AppActivate id=$($browser.Id) title=$($browser.MainWindowTitle) result=$activated"
       return $activated

@@ -52,7 +52,7 @@ host 的门控只有一条：
 
 1. toast 的 `launch` 是 `dsh-desktop-notify://open?session=<id>&origin=<origin>`，`activationType="protocol"`。
 2. Windows 调用已注册的协议 helper：`assets/open.ps1`（注册在 `HKCU\Software\Classes\dsh-desktop-notify`）。
-3. helper 把会话 id POST 到 host 的 `/dsh-desktop-notify/activate`，并尽力用 `AppActivate` 把已运行的浏览器窗口带到前台。
+3. helper 把会话 id POST 到 host 的 `/dsh-desktop-notify/activate`，然后用 `ShowWindow` / `SetForegroundWindow` 恢复并置前 Edge/Chrome 窗口（最小化也可以恢复）。
 4. helper 通过 UI Automation 把标题匹配的 DSH 标签页切到前台（浏览器停在别的标签页时也能回来）；标题已变化时用目标会话标题兜底。
 5. 已打开的 DSH 页面每秒轮询 `/dsh-desktop-notify/activation`；收到请求后调用 `uiWorkspace.openSession(sessionId)`，页面切到对应对话，并尝试 `window.focus()`。
 6. host 只把请求投递给**用户最后使用的那个页面**，多标签不会一起跳。
@@ -145,7 +145,7 @@ bootstrap page served session=session-...
 ## 已知限制
 
 - 后台子代理会话默认不提醒（它们的完成由主对话那一轮覆盖）。
-- `AppActivate` 抬窗是尽力而为；浏览器可能拒绝 `window.focus()`，但会话切换不依赖它。
+- 窗口恢复/置前对 Edge/Chrome 使用 Win32 `ShowWindow` + `SetForegroundWindow`；系统前台锁定、虚拟桌面切换等极端情况仍可能失败。
 - 标签页切换 / 窗口激活目前针对 Edge / Chrome；DSH 在 Firefox 中时不会自动切回该标签页。
 - 标签页切换按标题匹配；多个标签页标题相同时，可能选中同标题的另一个 DSH 标签页（仍会落在对应会话）。
 - helper 日志：`%TEMP%\dsh-desktop-notify-helper.log`。
