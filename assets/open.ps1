@@ -1,6 +1,13 @@
 ﻿param([string]$Uri)
 
 $ErrorActionPreference = 'SilentlyContinue'
+$logFile = Join-Path $env:TEMP 'dsh-desktop-notify-helper.log'
+
+function Write-Log([string]$Message) {
+  try {
+    Add-Content -LiteralPath $logFile -Value ((Get-Date).ToString('o') + ' ' + $Message) -Encoding UTF8
+  } catch {}
+}
 
 function Unescape([string]$value) {
   try { return [Uri]::UnescapeDataString($value) } catch { return $value }
@@ -41,18 +48,48 @@ function Focus-BrowserTab([string]$Needle) {
             $sel = $tab.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
             $sel.Select()
             $tab.SetFocus()
+            Write-Log "tab selected: $name"
             return $true
-          } catch {}
+          } catch {
+            Write-Log "tab select failed: $name :: $($_.Exception.Message)"
+          }
         }
       }
     }
-  } catch {}
+  } catch {
+    Write-Log "focus error: $($_.Exception.Message)"
+  }
+  return $false
+}
+
+# 把运行 DSH 的浏览器窗口带到前台；后台窗口里直接选标签页不会真正切过去，
+# 所以必须先激活窗口，再选标签页。
+function Activate-Browser {
+  try {
+    $shell = New-Object -ComObject WScript.Shell
+    $browser = Get-Process msedge, chrome -ErrorAction SilentlyContinue |
+      Where-Object { $_.MainWindowTitle -and $_.MainWindowTitle -match 'DeepSeek Harness' } |
+      Select-Object -First 1
+    if (-not $browser) {
+      $browser = Get-Process msedge, chrome -ErrorAction SilentlyContinue |
+        Where-Object { $_.MainWindowTitle } | Select-Object -First 1
+    }
+    if ($browser) {
+      $activated = $shell.AppActivate($browser.Id)
+      Write-Log "AppActivate id=$($browser.Id) title=$($browser.MainWindowTitle) result=$activated"
+      return $activated
+    }
+    Write-Log 'AppActivate: no browser window found'
+  } catch {
+    Write-Log "AppActivate error: $($_.Exception.Message)"
+  }
   return $false
 }
 
 # 1) 把会话 id 回传给正在运行的 DSH host。
 try {
   if (-not $Uri) { exit 0 }
+  Write-Log "start uri=$Uri"
   $u = [Uri]$Uri
   $query = $u.Query
   if ($query.StartsWith('?')) { $query = $query.Substring(1) }
@@ -71,32 +108,26 @@ try {
     $body = @{ sessionId = $session; forceFallback = ($parts['fallback'] -eq '1') } | ConvertTo-Json -Compress
     $resp = Invoke-RestMethod -Method POST -Uri ($origin.TrimEnd('/') + '/dsh-desktop-notify/activate') `
       -ContentType 'application/json' -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 5
+    Write-Log "response live=$($resp.livePages) targetTitle=$($resp.targetTitle) sessionTitle=$($resp.sessionTitle) fallback=$([bool]$resp.fallbackUrl)"
     # 没有任何已打开页面时，host 返回一个带密钥的引导 URL；由 helper 打开新页。
     if ($resp -and $resp.fallbackUrl) {
       Start-Process $resp.fallbackUrl
     }
 
-    # 浏览器可能正停在别的标签页：先把目标 DSH 标签页切到前台，再让页面切会话。
+    # 浏览器可能正停在别的标签页：先把浏览器窗口带到前台，再切目标 DSH 标签页。
+    Activate-Browser | Out-Null
+    Start-Sleep -Milliseconds 300
     $focusedTab = Focus-BrowserTab $resp.targetTitle
+    Write-Log "focus targetTitle result=$focusedTab"
     if (-not $focusedTab) {
       Start-Sleep -Milliseconds 1200
       $focusedTab = Focus-BrowserTab $resp.sessionTitle
+      Write-Log "focus sessionTitle result=$focusedTab"
     }
     if (-not $focusedTab) {
       Focus-BrowserTab 'DeepSeek Harness' | Out-Null
+      Write-Log 'focus fallback DeepSeek Harness'
     }
+    Activate-Browser | Out-Null
   }
-} catch {}
-
-# 2) 尽力把已在运行的浏览器窗口带到前台；页面侧随后会切换到目标会话。
-try {
-  $shell = New-Object -ComObject WScript.Shell
-  $browser = Get-Process msedge, chrome -ErrorAction SilentlyContinue |
-    Where-Object { $_.MainWindowTitle -and $_.MainWindowTitle -match 'DeepSeek Harness' } |
-    Select-Object -First 1
-  if (-not $browser) {
-    $browser = Get-Process msedge, chrome -ErrorAction SilentlyContinue |
-      Where-Object { $_.MainWindowTitle } | Select-Object -First 1
-  }
-  if ($browser) { $shell.AppActivate($browser.Id) | Out-Null }
 } catch {}

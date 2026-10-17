@@ -1,6 +1,6 @@
 {
   "name": "@dsh-external/dsh-desktop-notify",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "DSH 桌面通知：所有 DSH 前端失焦时，对决策/授权/意外中断/任务完成发 Windows 通知（标题=会话标题，点击复用已有页面切回对话）",
   "type": "module",
   "main": "./lib/index.js",
