@@ -50,12 +50,14 @@ host 的门控只有一条：
 
 点击 toast 优先复用已经打开的 DSH 页面，不新开标签页：
 
-1. toast 的 `launch` 是 `dsh-desktop-notify://open?session=<id>&origin=<origin>`，`activationType="protocol"`。
-2. Windows 调用已注册的协议 helper：`assets/open.ps1`（注册在 `HKCU\Software\Classes\dsh-desktop-notify`）。
+1. host 启动 `assets/toast-listener.ps1`（隐藏 PowerShell），由它显示 toast 并保持 `ToastNotification` 对象存活。
+2. 点击 toast 时触发 listener 的 `Activated` 事件；listener 调用 `assets/open.ps1`，传入 `dsh-desktop-notify://open?session=<id>&origin=<origin>`。
 3. helper 把会话 id POST 到 host 的 `/dsh-desktop-notify/activate`，然后用 `ShowWindow` / `SetForegroundWindow` 恢复并置前 Edge/Chrome 窗口（最小化也可以恢复）。
 4. helper 通过 UI Automation 把标题匹配的 DSH 标签页切到前台（浏览器停在别的标签页时也能回来）；标题已变化时用目标会话标题兜底。
 5. 已打开的 DSH 页面每秒轮询 `/dsh-desktop-notify/activation`；收到请求后调用 `uiWorkspace.openSession(sessionId)`，页面切到对应对话，并尝试 `window.focus()`。
 6. host 只把请求投递给**用户最后使用的那个页面**，多标签不会一起跳。
+
+自定义协议 `dsh-desktop-notify` 仍然注册在 `HKCU\Software\Classes\dsh-desktop-notify`，用于旧通知或手动 URL；新通知的点击由 listener 直接处理，不依赖协议激活。
 
 **没有页面时的兜底**：如果 host 发现没有任何已连接的 DSH 页面，会让 helper 在默认浏览器打开一个引导页；引导页把会话 id 写入 `localStorage` 并跳回 DSH，新页面加载后自动打开对应对话。
 
@@ -121,10 +123,10 @@ Invoke-WebRequest -UseBasicParsing -Method POST -ContentType 'application/json' 
 
 ## 真实输出
 
-Toast XML（点击会激活自定义协议）：
+Toast XML（点击由 listener 的 `Activated` 事件处理）：
 
 ```xml
-<toast activationType="protocol" launch="dsh-desktop-notify://open?session=session-...&amp;origin=http%3A%2F%2F127.0.0.1%3A3080">
+<toast>
   <visual><binding template="ToastGeneric">
     <text>MC游戏存档崩溃修复</text>
     <text>点击通知应回到对应对话</text>
@@ -137,6 +139,9 @@ Toast XML（点击会激活自定义协议）：
 日志片段：
 
 ```text
+toast listener started job=C:\...\dsh-desktop-notify-job-....json click=yes
+shown
+activated
 activation queued session=session-... target=dsh-... live=2
 activation delivered session=session-... client=dsh-...
 bootstrap page served session=session-...
@@ -148,7 +153,8 @@ bootstrap page served session=session-...
 - 窗口恢复/置前对 Edge/Chrome 使用 Win32 `ShowWindow` + `SetForegroundWindow`；系统前台锁定、虚拟桌面切换等极端情况仍可能失败。
 - 标签页切换 / 窗口激活目前针对 Edge / Chrome；DSH 在 Firefox 中时不会自动切回该标签页。
 - 标签页切换按标题匹配；多个标签页标题相同时，可能选中同标题的另一个 DSH 标签页（仍会落在对应会话）。
-- helper 日志：`%TEMP%\dsh-desktop-notify-helper.log`。
+- helper 日志：`%TEMP%\dsh-desktop-notify-helper.log`；toast listener 日志：`%TEMP%\dsh-desktop-notify-toast.log`。
+- listener 默认保持 15 分钟等待点击；超过后点击历史里的旧通知不会触发切会话，重新发一条即可。
 - 自定义协议 helper 需要插件加载时注册；如果移动了插件目录，重新加载插件会更新注册。
 - Windows 可能缓存 AUMID 的应用名/图标；重启 Explorer 或清空通知历史后会刷新。
 
@@ -159,6 +165,7 @@ bootstrap page served session=session-...
 - host：[lib/index.js](lib/index.js)
 - client：[lib/client.js](lib/client.js)
 - 协议 helper：[assets/open.ps1](assets/open.ps1)
+- toast listener：[assets/toast-listener.ps1](assets/toast-listener.ps1)
 - 图标：[assets/deepseek-harness.png](assets/deepseek-harness.png)、[assets/deepseek-harness.ico](assets/deepseek-harness.ico)
 - 条目：[cordis.patch.yml](cordis.patch.yml)
 
