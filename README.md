@@ -53,8 +53,9 @@ host 的门控只有一条：
 1. toast 的 `launch` 是 `dsh-desktop-notify://open?session=<id>&origin=<origin>`，`activationType="protocol"`。
 2. Windows 调用已注册的协议 helper：`assets/open.ps1`（注册在 `HKCU\Software\Classes\dsh-desktop-notify`）。
 3. helper 把会话 id POST 到 host 的 `/dsh-desktop-notify/activate`，并尽力用 `AppActivate` 把已运行的浏览器窗口带到前台。
-4. 已打开的 DSH 页面每秒轮询 `/dsh-desktop-notify/activation`；收到请求后调用 `uiWorkspace.openSession(sessionId)`，页面切到对应对话，并尝试 `window.focus()`。
-5. host 只把请求投递给**用户最后使用的那个页面**，多标签不会一起跳。
+4. helper 通过 UI Automation 把标题匹配的 DSH 标签页切到前台（浏览器停在别的标签页时也能回来）；标题已变化时用目标会话标题兜底。
+5. 已打开的 DSH 页面每秒轮询 `/dsh-desktop-notify/activation`；收到请求后调用 `uiWorkspace.openSession(sessionId)`，页面切到对应对话，并尝试 `window.focus()`。
+6. host 只把请求投递给**用户最后使用的那个页面**，多标签不会一起跳。
 
 **没有页面时的兜底**：如果 host 发现没有任何已连接的 DSH 页面，会让 helper 在默认浏览器打开一个引导页；引导页把会话 id 写入 `localStorage` 并跳回 DSH，新页面加载后自动打开对应对话。
 
@@ -114,6 +115,7 @@ Invoke-WebRequest -UseBasicParsing -Method POST -ContentType 'application/json' 
 - 写入 `HKCU\Software\Classes\dsh-desktop-notify`（自定义协议 helper）。
 - 写入 `HKCU\Software\Classes\AppUserModelId\DeepSeek.DSH.Notify`（应用名与图标）。
 - 通过 `powershell.exe` 显示 toast，并在临时目录写一个 `.ps1` 脚本。
+- helper 使用 Windows UI Automation 查找并切换浏览器标签页（不需要管理员权限）。
 - 本机 HTTP 路由：`/focus`、`/status`、`/test`、`/activate`、`/activation`、`/open`；其中 `/activate` 和 `/open` 只接受 loopback 请求，`/open` 还需要每次进程随机生成的密钥。
 - 没有外部服务、没有上传、没有网络请求（除本机 DSH 地址）。
 
@@ -144,6 +146,7 @@ bootstrap page served session=session-...
 
 - 后台子代理会话默认不提醒（它们的完成由主对话那一轮覆盖）。
 - `AppActivate` 抬窗是尽力而为；浏览器可能拒绝 `window.focus()`，但会话切换不依赖它。
+- 标签页切换按标题匹配；多个标签页标题相同时，可能选中同标题的另一个 DSH 标签页（仍会落在对应会话）。
 - 自定义协议 helper 需要插件加载时注册；如果移动了插件目录，重新加载插件会更新注册。
 - Windows 可能缓存 AUMID 的应用名/图标；重启 Explorer 或清空通知历史后会刷新。
 

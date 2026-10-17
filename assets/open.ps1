@@ -6,6 +6,50 @@ function Unescape([string]$value) {
   try { return [Uri]::UnescapeDataString($value) } catch { return $value }
 }
 
+# 把浏览器里标题包含 $Needle 的标签页切到前台（Edge / Chrome 通用）。
+function Focus-BrowserTab([string]$Needle) {
+  if ([string]::IsNullOrWhiteSpace($Needle)) { return $false }
+  try {
+    Add-Type -AssemblyName UIAutomationClient
+    Add-Type -AssemblyName UIAutomationTypes
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $procs = Get-Process msedge, chrome -ErrorAction SilentlyContinue |
+      Where-Object { $_.MainWindowTitle -and $_.MainWindowTitle -match 'DeepSeek Harness' }
+    if (-not $procs) {
+      $procs = Get-Process msedge, chrome -ErrorAction SilentlyContinue |
+        Where-Object { $_.MainWindowTitle }
+    }
+    foreach ($proc in $procs) {
+      $cond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $proc.Id)
+      $win = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, $cond)
+      if (-not $win) { continue }
+      $tabCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::TabItem)
+      $tabs = $win.FindAll([System.Windows.Automation.TreeScope]::Descendants, $tabCond)
+      foreach ($tab in $tabs) {
+        $name = $tab.Current.Name
+        if (-not $name) { continue }
+        $match = $name.IndexOf($Needle, [StringComparison]::OrdinalIgnoreCase) -ge 0
+        if (-not $match -and $Needle.Length -gt 10) {
+          $short = $Needle.Substring(0, 10)
+          $match = $name.IndexOf($short, [StringComparison]::OrdinalIgnoreCase) -ge 0
+        }
+        if ($match) {
+          try {
+            $sel = $tab.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
+            $sel.Select()
+            $tab.SetFocus()
+            return $true
+          } catch {}
+        }
+      }
+    }
+  } catch {}
+  return $false
+}
+
 # 1) 把会话 id 回传给正在运行的 DSH host。
 try {
   if (-not $Uri) { exit 0 }
@@ -30,6 +74,16 @@ try {
     # 没有任何已打开页面时，host 返回一个带密钥的引导 URL；由 helper 打开新页。
     if ($resp -and $resp.fallbackUrl) {
       Start-Process $resp.fallbackUrl
+    }
+
+    # 浏览器可能正停在别的标签页：先把目标 DSH 标签页切到前台，再让页面切会话。
+    $focusedTab = Focus-BrowserTab $resp.targetTitle
+    if (-not $focusedTab) {
+      Start-Sleep -Milliseconds 1200
+      $focusedTab = Focus-BrowserTab $resp.sessionTitle
+    }
+    if (-not $focusedTab) {
+      Focus-BrowserTab 'DeepSeek Harness' | Out-Null
     }
   }
 } catch {}
