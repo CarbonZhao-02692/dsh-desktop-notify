@@ -139,7 +139,7 @@ Invoke-WebRequest -UseBasicParsing -Method POST -ContentType 'application/json' 
 ```xml
 <toast activationType="protocol" launch="dsh-desktop-notify://open?session=session-...&amp;origin=http%3A%2F%2F127.0.0.1%3A3080">
   <visual><binding template="ToastGeneric">
-    <text>MC游戏存档崩溃修复</text>
+    <text>示例会话标题</text>
     <text>点击通知应回到对应对话</text>
     <image placement="appLogoOverride" src="file:///.../assets/deepseek-harness.png"/>
   </binding></visual>
@@ -154,7 +154,7 @@ shown
 clicked
 start uri=dsh-desktop-notify://open?session=session-...
 activate hwnd=... minimized=False maximized=True foreground=True
-tab selected: MC游戏存档崩溃修复 — DeepSeek Harness ...
+tab selected: 示例会话标题 — DeepSeek Harness ...
 activation queued session=session-... target=dsh-... live=1
 activation delivered session=session-... client=dsh-...
 ```
