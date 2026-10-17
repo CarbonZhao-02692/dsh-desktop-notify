@@ -1,0 +1,5 @@
+node_modules/
+*.tgz
+*.log
+*.tsbuildinfo
+docs/action-center.png

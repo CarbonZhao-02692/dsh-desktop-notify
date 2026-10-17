@@ -1,0 +1,10 @@
+Notices
+=======
+
+The black whale icon in assets/ is derived from the official DeepSeek Harness
+web frontend asset `@deepseek-ai/dsh-web-frontend/dist/favicon.svg`
+(MIT licensed). DeepSeek Harness and the whale mark belong to their
+respective owners; this community plugin is not affiliated with or endorsed
+by DeepSeek.
+
+The notification helper and plugin code are MIT licensed; see LICENSE.
