@@ -46,19 +46,27 @@ host 的门控只有一条：
 
 `visible` 只用于状态展示，不参与门控。
 
-## 点击通知回到对话
+## 通知模式与点击回到对话
 
-当前 Windows 10 环境里，toast 的点击激活不能稳定投递给 PowerShell 进程（协议激活和 `Activated` 事件都未触发）。插件因此使用**原生 WPF 通知卡片**作为可点击通知：
+配置项 `enableCard` 决定通知形态：
 
-1. host 发一条 `SuppressPopup=true` 的 Windows toast，只写入通知中心做历史；应用名、鲸鱼图标、会话标题和正文都在里面。
-2. host 同时启动 `assets/notify-card.ps1`，在屏幕右下角显示原生 WPF 卡片（应用名、图标、标题、正文），不抢焦点，20 秒后自动关闭。
-3. 点击卡片：调用 `assets/open.ps1`，把会话 id POST 到 host 的 `/dsh-desktop-notify/activate`。
-4. helper 用 `ShowWindow` / `SetForegroundWindow` 恢复并置前 Edge/Chrome 窗口（最小化也可以恢复）。
-5. helper 通过 UI Automation 把标题匹配的 DSH 标签页切到前台；标题已变化时用目标会话标题兜底。
-6. 已打开的 DSH 页面每秒轮询 `/dsh-desktop-notify/activation`；收到请求后调用 `uiWorkspace.openSession(sessionId)`，页面切到对应对话。
-7. host 只把请求投递给**用户最后使用的那个页面**，多标签不会一起跳。
+### `enableCard: false`（默认）
 
-卡片是原生的，不使用浏览器通知；通知中心里的 toast 只用于历史记录，点击它以打开会话不保证生效，请点击右下角卡片。
+只显示正常的 Windows toast，不显示自绘卡片：
+
+1. toast 带 `activationType="protocol"` 和 `launch="dsh-desktop-notify://open?session=<id>&origin=<origin>"`；Windows 调用协议 helper `assets/open.ps1`。
+2. 同时启动 `assets/toast-listener.ps1`，在隐藏 PowerShell 进程里保持 `ToastNotification` 存活；如果 `Activated` 事件被投递，也会调用同一个 helper。
+3. helper 把会话 id POST 到 host 的 `/dsh-desktop-notify/activate`，用 `ShowWindow` / `SetForegroundWindow` 恢复并置前 Edge/Chrome 窗口（只有最小化时才 `SW_RESTORE`，最大化保持不变）。
+4. helper 通过 UI Automation 把标题匹配的 DSH 标签页切到前台；已打开的 DSH 页面每秒轮询 `/dsh-desktop-notify/activation`，收到后调用 `uiWorkspace.openSession(sessionId)`。
+5. host 只把请求投递给**用户最后使用的那个页面**，多标签不会一起跳。
+
+### `enableCard: true`
+
+只显示右下角原生 WPF 卡片，不发送任何 Windows toast：
+
+1. host 启动 `assets/notify-card.ps1`，显示应用名、鲸鱼图标、会话标题和正文，不抢焦点，20 秒后自动关闭。
+2. 点击卡片调用 `assets/open.ps1`，后续的激活、窗口恢复、标签页切换与上面相同。
+3. 不使用浏览器通知；通知中心不会留下记录。
 
 **没有页面时的兜底**：如果 host 发现没有任何已连接的 DSH 页面，会让 helper 在默认浏览器打开一个引导页；引导页把会话 id 写入 `localStorage` 并跳回 DSH，新页面加载后自动打开对应对话。
 
@@ -92,6 +100,7 @@ Invoke-WebRequest -UseBasicParsing -Method POST -ContentType 'application/json' 
   config:
     onlyWhenUnfocused: true   # false = 页面聚焦时也发
     clickToOpen: true         # false = 通知不可点击回会话
+    enableCard: false         # true = 仅自绘卡片；false = 仅普通 Windows toast
     ignoreSubagent: true      # 后台子代理会话不提醒
     notifyOnDecision: true
     notifyOnApproval: true
@@ -117,49 +126,48 @@ Invoke-WebRequest -UseBasicParsing -Method POST -ContentType 'application/json' 
 
 - 写入 `HKCU\Software\Classes\dsh-desktop-notify`（自定义协议 helper）。
 - 写入 `HKCU\Software\Classes\AppUserModelId\DeepSeek.DSH.Notify`（应用名与图标）。
-- 通过 `powershell.exe` 显示 toast，并在临时目录写一个 `.ps1` 脚本。
+- toast 模式会注册 `HKCU\Software\Classes\dsh-desktop-notify` 协议；卡片模式不发送 toast，也不注册协议。
+- 通过 `powershell.exe` 显示 toast 或卡片，并在临时目录写一个 `.ps1` 脚本。
 - helper 使用 Windows UI Automation 查找并切换浏览器标签页（不需要管理员权限）。
 - 本机 HTTP 路由：`/focus`、`/status`、`/test`、`/activate`、`/activation`、`/open`；其中 `/activate` 和 `/open` 只接受 loopback 请求，`/open` 还需要每次进程随机生成的密钥。
 - 没有外部服务、没有上传、没有网络请求（除本机 DSH 地址）。
 
 ## 真实输出
 
-通知中心 toast（`SuppressPopup=true`，只做历史记录）：
+### toast 模式（`enableCard: false`）
 
 ```xml
-<toast>
+<toast activationType="protocol" launch="dsh-desktop-notify://open?session=session-...&amp;origin=http%3A%2F%2F127.0.0.1%3A3080">
   <visual><binding template="ToastGeneric">
     <text>MC游戏存档崩溃修复</text>
-    <text>点击卡片应回到对应对话</text>
+    <text>点击通知应回到对应对话</text>
     <image placement="appLogoOverride" src="file:///.../assets/deepseek-harness.png"/>
   </binding></visual>
   <audio src="ms-winsoundevent:Notification.Default"/>
 </toast>
 ```
 
-日志片段：
+### 卡片模式（`enableCard: true`）
 
 ```text
-notification exit=0 script=show-toast.ps1
-notification exit=0 script=notify-card.ps1
 shown
 clicked
 start uri=dsh-desktop-notify://open?session=session-...
-ShowWindow/SetForegroundWindow hwnd=... result=True
+activate hwnd=... minimized=False maximized=True foreground=True
 tab selected: MC游戏存档崩溃修复 — DeepSeek Harness ...
-activation queued session=session-... target=dsh-... live=2
+activation queued session=session-... target=dsh-... live=1
 activation delivered session=session-... client=dsh-...
 ```
 
 ## 已知限制
 
 - 后台子代理会话默认不提醒（它们的完成由主对话那一轮覆盖）。
-- 可点击的是右下角原生卡片；通知中心里的 toast 只做历史记录，点击它不保证切会话。
-- 卡片显示 20 秒后自动关闭；需要更长时间可改 `assets/notify-card.ps1` 里的 `DispatcherTimer`。
+- `enableCard: false` 时通知中心里的 toast 点击是否触发协议/Activated 取决于 Windows 环境；当前这台 Windows 10 上两者都未触发。
+- `enableCard: true` 时可点击的是右下角原生卡片；卡片 20 秒后自动关闭。
 - 窗口恢复/置前对 Edge/Chrome 使用 Win32 `ShowWindow` + `SetForegroundWindow`；只有最小化时才 `SW_RESTORE`，最大化窗口保持最大化。系统前台锁定、虚拟桌面切换等极端情况仍可能失败。
 - 标签页切换 / 窗口激活目前针对 Edge / Chrome；DSH 在 Firefox 中时不会自动切回该标签页。
 - 标签页切换按标题匹配；多个标签页标题相同时，可能选中同标题的另一个 DSH 标签页（仍会落在对应会话）。
-- helper 日志：`%TEMP%\dsh-desktop-notify-helper.log`；卡片日志：`%TEMP%\dsh-desktop-notify-card.log`。
+- helper 日志：`%TEMP%\dsh-desktop-notify-helper.log`；卡片日志：`%TEMP%\dsh-desktop-notify-card.log`；toast listener 日志：`%TEMP%\dsh-desktop-notify-toast.log`。
 - Windows 可能缓存 AUMID 的应用名/图标；重启 Explorer 或清空通知历史后会刷新。
 
 ## 开发
@@ -169,7 +177,7 @@ activation delivered session=session-... client=dsh-...
 - host：[lib/index.js](lib/index.js)
 - client：[lib/client.js](lib/client.js)
 - 协议 helper：[assets/open.ps1](assets/open.ps1)
-- toast 显示：[assets/show-toast.ps1](assets/show-toast.ps1)
+- toast listener：[assets/toast-listener.ps1](assets/toast-listener.ps1)
 - 原生通知卡片：[assets/notify-card.ps1](assets/notify-card.ps1)
 - 图标：[assets/deepseek-harness.png](assets/deepseek-harness.png)、[assets/deepseek-harness.ico](assets/deepseek-harness.ico)
 - 条目：[cordis.patch.yml](cordis.patch.yml)
