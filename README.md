@@ -156,7 +156,7 @@ activation delivered session=session-... client=dsh-...
 - 后台子代理会话默认不提醒（它们的完成由主对话那一轮覆盖）。
 - 可点击的是右下角原生卡片；通知中心里的 toast 只做历史记录，点击它不保证切会话。
 - 卡片显示 20 秒后自动关闭；需要更长时间可改 `assets/notify-card.ps1` 里的 `DispatcherTimer`。
-- 窗口恢复/置前对 Edge/Chrome 使用 Win32 `ShowWindow` + `SetForegroundWindow`；系统前台锁定、虚拟桌面切换等极端情况仍可能失败。
+- 窗口恢复/置前对 Edge/Chrome 使用 Win32 `ShowWindow` + `SetForegroundWindow`；只有最小化时才 `SW_RESTORE`，最大化窗口保持最大化。系统前台锁定、虚拟桌面切换等极端情况仍可能失败。
 - 标签页切换 / 窗口激活目前针对 Edge / Chrome；DSH 在 Firefox 中时不会自动切回该标签页。
 - 标签页切换按标题匹配；多个标签页标题相同时，可能选中同标题的另一个 DSH 标签页（仍会落在对应会话）。
 - helper 日志：`%TEMP%\dsh-desktop-notify-helper.log`；卡片日志：`%TEMP%\dsh-desktop-notify-card.log`。

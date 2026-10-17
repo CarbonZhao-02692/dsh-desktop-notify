@@ -81,14 +81,21 @@ using System;
 using System.Runtime.InteropServices;
 public class DshWin32Focus {
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 }
 '@
         $hwnd = $browser.MainWindowHandle
+        $foreground = $false
         if ($hwnd -ne 0) {
-          [DshWin32Focus]::ShowWindow($hwnd, 9) | Out-Null
+          $minimized = [DshWin32Focus]::IsIconic($hwnd)
+          $maximized = [DshWin32Focus]::IsZoomed($hwnd)
+          if ($minimized) {
+            [DshWin32Focus]::ShowWindow($hwnd, 9) | Out-Null
+          }
           [DshWin32Focus]::BringWindowToTop($hwnd) | Out-Null
           $foreground = [DshWin32Focus]::SetForegroundWindow($hwnd)
           if (-not $foreground) {
@@ -96,13 +103,18 @@ public class DshWin32Focus {
             [DshWin32Focus]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
             $foreground = [DshWin32Focus]::SetForegroundWindow($hwnd)
           }
-          Write-Log "ShowWindow/SetForegroundWindow hwnd=$hwnd result=$foreground"
+          Write-Log "activate hwnd=$hwnd minimized=$minimized maximized=$maximized foreground=$foreground"
         }
       } catch {
         Write-Log "Win32 activate error: $($_.Exception.Message)"
       }
-      $activated = $shell.AppActivate($browser.Id)
-      Write-Log "AppActivate id=$($browser.Id) title=$($browser.MainWindowTitle) result=$activated"
+      $activated = $foreground
+      if (-not $activated) {
+        $activated = $shell.AppActivate($browser.Id)
+        Write-Log "AppActivate id=$($browser.Id) title=$($browser.MainWindowTitle) result=$activated"
+      } else {
+        Write-Log 'already foreground; skip AppActivate (preserve maximized state)'
+      }
       return $activated
     }
     Write-Log 'AppActivate: no browser window found'
