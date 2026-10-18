@@ -4,6 +4,8 @@
 
 ![Windows 通知截图](docs/notification.png)
 
+![自绘通知卡片](docs/card.png)
+
 ## 安装
 
 ```powershell
@@ -75,7 +77,8 @@ host 的门控只有一条：
 DSH 设置 → 通用 → **桌面通知**：
 
 - 显示当前上报页面数和焦点汇总状态（有前端聚焦 = 静默中 / 全部失焦 = 会通知）。
-- “发送测试通知”按钮：强制发一条 Windows toast，忽略焦点门控，用来验证通知权限、应用名、图标与点击行为。
+- “自绘卡片”开关：切换 `enableCard`，立即生效并持久化到 `%DSH_HOME%\super-injector\dsh-desktop-notify-config.json`；关闭则只发 Windows toast，打开则只显示可点击卡片。
+- “发送测试通知”按钮：强制发一条通知，忽略焦点门控，用来验证当前模式、应用名、图标与点击行为。
 
 也可以直接调用 HTTP 接口：
 
