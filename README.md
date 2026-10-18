@@ -7,10 +7,10 @@
 ## 安装
 
 ```powershell
-dsh plugin --profile web add github:CarbonZhao-02692/dsh-desktop-notify
+dsh plugin --profile web add @carbonzhao/dsh-desktop-notify
 ```
 
-重启 `dsh web`，然后硬刷新页面（Ctrl+Shift+R）。插件目前未发布 NPM 包，所以用 `github:` 源码安装；发布 NPM 后可直接用包名一键安装。
+重启 `dsh web`，然后硬刷新页面（Ctrl+Shift+R）。也可以从源码安装：`dsh plugin --profile web add github:CarbonZhao-02692/dsh-desktop-notify`。
 
 ## 能力分类
 
@@ -96,7 +96,7 @@ Invoke-WebRequest -UseBasicParsing -Method POST -ContentType 'application/json' 
 
 ```yaml
 - id: dsh-desktop-notify
-  name: '@dsh-external/dsh-desktop-notify'
+  name: '@carbonzhao/dsh-desktop-notify'
   config:
     onlyWhenUnfocused: true   # false = 页面聚焦时也发
     clickToOpen: true         # false = 通知不可点击回会话
